@@ -18,7 +18,7 @@ interface UserInfoResponseData {
   userId: string;
   username: string;
   roles: string[];
-  [key: string]: any; // To allow for other potential fields from the API
+  [key: string]: any; 
 }
 
 const api = {

@@ -1,19 +1,19 @@
-// src/skill.ts
-const fs = require("fs");
-const path = require("path");
+// @ts-check
+
+import fs from "fs";
+import path from "path";
 import { Request, Response } from 'express';
 
 interface SkillResult {
   name: string;
-  skill: string; // percentage string
-  extension: string; // no leading dot
+  skill: string; 
+  extension: string; 
 }
 
 interface Config {
   project: string;
 }
 
-// Keys of languageMap no longer have a leading dot
 const languageMap: { [key: string]: string } = {
   "js": "JavaScript",
   "ts": "TypeScript",
@@ -55,9 +55,9 @@ function walkDir(dirPath: string, counts: Map<string, number>): number {
       if (stats.isDirectory()) {
         totalFiles += walkDir(fullPath, counts);
       } else if (stats.isFile()) {
-        let ext = path.extname(file); // Get extension with leading dot
+        let ext = path.extname(file);
         if (ext) {
-          ext = ext.substring(1).toLowerCase(); // Remove dot and convert to lowercase
+          ext = ext.substring(1).toLowerCase(); 
           counts.set(ext, (counts.get(ext) || 0) + 1);
           totalFiles++;
         }
@@ -98,11 +98,11 @@ async function analyzeProjectSkills(): Promise<{ project: string; skills: SkillR
   const skills: SkillResult[] = [];
   for (const [ext, count] of languageCounts.entries()) {
     const percentage = ((count / totalFiles) * 100).toFixed(2);
-    const name = languageMap[ext] || ext.toUpperCase(); // Use dot-less ext for lookup, fallback to uppercase for name
+    const name = languageMap[ext] || ext.toUpperCase(); 
     skills.push({
       name: name.toLowerCase(),
       skill: `${percentage}%`,
-      extension: ext, // Store dot-less extension
+      extension: ext, 
     });
   }
 

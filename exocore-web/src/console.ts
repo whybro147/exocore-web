@@ -1,4 +1,5 @@
-// console.ts
+// @ts-check
+
 import fs from "fs";
 import path from "path";
 import { spawn, ChildProcess } from "child_process";
@@ -13,7 +14,6 @@ let processInstance: ChildProcess | null = null;
 let isRunning: boolean = false;
 let isAwaitingInput: boolean = false;
 
-// This string is a marker for the frontend to request user input.
 const INPUT_PROMPT_STRING = "__NEEDS_INPUT__";
 
 interface ApiType {
@@ -52,7 +52,6 @@ const api: ApiType = {
     if (!fs.existsSync(LOG_DIR)) {
       fs.mkdirSync(LOG_DIR, { recursive: true });
     }
-    // Don't write the input prompt marker to the log file
     if(!data.includes(INPUT_PROMPT_STRING)) {
         fs.appendFileSync(LOG_FILE, `${data}`);
     }
@@ -60,11 +59,9 @@ const api: ApiType = {
     if (!silent && wss && wss.clients) {
       wss.clients.forEach((client: WebSocket) => {
         if (client.readyState === WebSocket.OPEN) {
-          // Check for the input prompt marker
           if (data.includes(INPUT_PROMPT_STRING)) {
             const cleanData = data.replace(INPUT_PROMPT_STRING, "").trim();
             isAwaitingInput = true;
-            // Send a structured message to the client
             client.send(JSON.stringify({ type: 'INPUT_REQUIRED', payload: cleanData }));
           } else {
             client.send(data);
@@ -76,8 +73,7 @@ const api: ApiType = {
       console.error(`BROADCAST_ERROR_LOG: ${data.trim()}`);
     }
   },
-
-  // ... (rest of the functions: parseExocoreRun, executeCommand, runCommandsSequentially are unchanged)
+  
   parseExocoreRun(filePath: string): { exportCommands: string[]; runCommand: string | null } {
 const raw: string = fs.readFileSync(filePath, "utf8");
 const exportMatch: RegExpMatchArray | null = raw.match(/export\s*=\s*{([\s\S]*?)}/);

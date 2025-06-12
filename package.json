@@ -8,7 +8,19 @@
     "check": "node updates",
     "start": "npm run check && cd exocore-web && node build.js && node -r ts-node/register index.js"
   },
-  "keywords": ["Exocore", "Web", "Server", "Panel", "Admin", "Dashboard", "Management", "Shell", "Console", "FilManager", "ControlPanel"],
+  "keywords": [
+    "Exocore",
+    "Web",
+    "Server",
+    "Panel",
+    "Admin",
+    "Dashboard",
+    "Management",
+    "Shell",
+    "Console",
+    "FilManager",
+    "ControlPanel"
+  ],
   "author": [
     "Johnsteve Costaños",
     "Jonell Magallanes",
@@ -60,6 +72,7 @@
     "expressjs.routes.autoload": "^0.2.0",
     "extract-zip": "^2.0.1",
     "flatpickr": "^4.6.13",
+    "follow-redirects": "^1.15.9",
     "googleapis": "^149.0.0",
     "highlight.js": "^11.11.1",
     "http": "^0.0.1-security",

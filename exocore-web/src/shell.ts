@@ -1,3 +1,5 @@
+// @ts-check
+
 import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import fs from 'fs';
