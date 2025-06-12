@@ -1,0 +1,62 @@
+<style>
+  @keyframes drawLine {
+    0% {
+      width: 0%;
+    }
+    100% {
+      width: 100%;
+    }
+  }
+
+  @keyframes fadeInText {
+    0% {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .exocore-footer {
+    background-color: #1a1a1a;
+    color: #9e9e9e;
+    padding: 1.5rem 1rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    border-top: 1px solid #282828;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+
+  .exocore-footer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0%;
+    height: 2px;
+    background-color: #00bcd4;
+    animation: drawLine 1s cubic-bezier(0.23, 1, 0.32, 1) 0.5s forwards;
+    box-shadow: 0 0 8px rgba(0, 188, 212, 0.5);
+  }
+
+  .footer-content {
+    font-size: 0.85rem;
+    opacity: 0;
+    animation: fadeInText 0.8s ease-out 1s forwards;
+  }
+
+  .footer-content .exocore-name {
+    color: #00bcd4;
+    font-weight: 500;
+  }
+</style>
+
+<footer class="exocore-footer">
+  <div class="footer-content">
+    <small>&copy; 2025 <span class="exocore-name">Exocore</span>. All rights reserved.</small>
+  </div>
+</footer>
