@@ -21,13 +21,14 @@
     "FilManager",
     "ControlPanel"
   ],
-  "author": [
+  "author": "Exocore Organization",
+  "contributors": [
     "Johnsteve Costaños",
     "Jonell Magallanes",
     "Jr Busaco",
     "Kiff Hyacinth Pon"
   ],
-  "license": "ISC",
+  "license": "MIT",
   "engines": {
     "node": "23.7.0"
   },
