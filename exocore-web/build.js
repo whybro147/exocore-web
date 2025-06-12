@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { build } = require('esbuild');
 const { solidPlugin } = require('esbuild-plugin-solid');
-
+// build jsx dude
 const publicDir = path.resolve(__dirname, 'public');
 
 const publicDirJs = path.resolve(__dirname, 'public', 'src');
