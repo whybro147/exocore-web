@@ -18,8 +18,9 @@ const errorHtmlContent = `<!DOCTYPE html>
 </html>`;
 
 function sendErrorHtmlPage(res: Response, statusCode: number = 502) {
-  if (res.headersSent) return;
-  res.status(statusCode).type('text/html').send(errorHtmlContent);
+  if (!res.headersSent) {
+    res.status(statusCode).type('text/html').send(errorHtmlContent);
+  }
 }
 
 interface RouteConfig {
@@ -34,7 +35,6 @@ interface RoutesFile {
 
 function loadAndRegisterRoutes() {
   const newRouter = Router();
-  let routesLoaded = false;
 
   try {
     if (fs.existsSync(routesJsonPath)) {
@@ -43,85 +43,60 @@ function loadAndRegisterRoutes() {
 
       if (routesData && Array.isArray(routesData.routes)) {
         routesData.routes.forEach(route => {
-          const method = route.method.trim().toLowerCase();
+          const method = route.method?.trim().toLowerCase();
           const routePath = route.path;
           const port = route.port;
 
-          if (!routePath || typeof routePath !== 'string') {
-            console.warn(`[ProxyToServerTS] Invalid path for method ${route.method}. Skipping.`);
-            return;
+          if (
+            typeof routePath !== 'string' ||
+            typeof port !== 'number' ||
+            port <= 0 || port >= 65536 ||
+            typeof (newRouter as any)[method] !== 'function'
+          ) {
+            return; // silently skip invalid
           }
 
-          if (typeof port !== 'number' || port <= 0 || port >= 65536) {
-            console.warn(`[ProxyToServerTS] Invalid or missing port for route "${routePath}". Skipping.`);
-            return;
-          }
+          (newRouter as any)[method](routePath, (req: Request, res: Response) => {
+            const options: http.RequestOptions = {
+              hostname: 'localhost',
+              port,
+              path: req.originalUrl,
+              method: req.method,
+              headers: { ...req.headers, 'host': `localhost:${port}` },
+            };
 
-          if (typeof (newRouter as any)[method] === 'function') {
-            (newRouter as any)[method](routePath, (req: Request, res: Response) => {
-              const backendRequestPath = req.originalUrl;
-              const options: http.RequestOptions = {
-                hostname: 'localhost',
-                port,
-                path: backendRequestPath,
-                method: req.method,
-                headers: { ...req.headers, 'host': `localhost:${port}` },
-              };
+            const headersAsRecord = options.headers as Record<string, unknown>;
+            delete headersAsRecord['connection'];
 
-              if (options.headers) {
-                const headersAsRecord = options.headers as Record<string, unknown>;
-                if (headersAsRecord['connection']) {
-                  delete headersAsRecord['connection'];
-                }
+            const backendRequest = http.request(options, backendResponse => {
+              if (backendResponse.statusCode && backendResponse.statusCode >= 400) {
+                sendErrorHtmlPage(res, backendResponse.statusCode);
+                backendResponse.resume();
+                return;
               }
 
-              const backendRequest = http.request(options, backendResponse => {
-                if (backendResponse.statusCode && backendResponse.statusCode >= 400) {
-                  sendErrorHtmlPage(res, backendResponse.statusCode);
-                  backendResponse.resume();
-                  return;
-                }
-
-                Object.entries(backendResponse.headers).forEach(([key, value]) => {
-                  if (key.toLowerCase() !== 'transfer-encoding' || value?.toString().toLowerCase() !== 'chunked') {
-                    res.setHeader(key, value as string);
-                  }
-                });
-
-                res.status(backendResponse.statusCode || 200);
-                backendResponse.pipe(res);
-              });
-
-              backendRequest.on('error', (error: NodeJS.ErrnoException) => {
-                if (['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT'].includes(error.code || '')) {
-                  sendErrorHtmlPage(res, 503);
-                } else {
-                  sendErrorHtmlPage(res);
+              Object.entries(backendResponse.headers).forEach(([key, value]) => {
+                if (key.toLowerCase() !== 'transfer-encoding') {
+                  res.setHeader(key, value as string);
                 }
               });
 
-              req.pipe(backendRequest);
+              res.status(backendResponse.statusCode || 200);
+              backendResponse.pipe(res);
             });
 
-            routesLoaded = true;
-          } else {
-            console.warn(`[ProxyToServerTS] Unsupported HTTP method "${method}" for path "${routePath}".`);
-          }
-        });
+            backendRequest.on('error', (error: NodeJS.ErrnoException) => {
+              const known = ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT'];
+              sendErrorHtmlPage(res, known.includes(error.code || '') ? 503 : 502);
+            });
 
-        if (routesLoaded) {
-          console.log(`[ProxyToServerTS] ${routesData.routes.length} routes loaded at ${new Date().toLocaleTimeString()}`);
-        } else {
-          console.warn(`[ProxyToServerTS] No valid routes loaded.`);
-        }
-      } else {
-        console.warn(`[ProxyToServerTS] Malformed routes.json.`);
+            req.pipe(backendRequest);
+          });
+        });
       }
-    } else {
-      console.warn(`[ProxyToServerTS] routes.json not found at ${routesJsonPath}`);
     }
-  } catch (err) {
-    console.error(`[ProxyToServerTS] Error loading routes: ${(err as Error).message}`);
+  } catch {
+    // silently fail
   }
 
   activeRoutesRouter = newRouter;
@@ -129,29 +104,12 @@ function loadAndRegisterRoutes() {
 
 loadAndRegisterRoutes();
 
-// Watch for file changes
-if (fs.existsSync(routesJsonPath)) {
-  fs.watchFile(routesJsonPath, { interval: 1000 }, (curr, prev) => {
-    if (curr.mtime !== prev.mtime) {
-      console.log(`[ProxyToServerTS] routes.json changed. Reloading...`);
-      loadAndRegisterRoutes();
-    }
-  });
-} else {
-  const checkInterval = setInterval(() => {
-    if (fs.existsSync(routesJsonPath)) {
-      clearInterval(checkInterval);
-      console.log(`[ProxyToServerTS] routes.json appeared. Watching and loading...`);
-      loadAndRegisterRoutes();
-      fs.watchFile(routesJsonPath, { interval: 1000 }, (curr, prev) => {
-        if (curr.mtime !== prev.mtime) {
-          console.log(`[ProxyToServerTS] Detected change. Reloading routes...`);
-          loadAndRegisterRoutes();
-        }
-      });
-    }
-  }, 5000);
-}
+// Silent watch every 1s
+fs.watchFile(routesJsonPath, { interval: 1000 }, (curr, prev) => {
+  if (curr.mtime !== prev.mtime) {
+    loadAndRegisterRoutes();
+  }
+});
 
 // Middleware export
 const mainProxyRouter = Router();
