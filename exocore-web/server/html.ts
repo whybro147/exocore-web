@@ -31,6 +31,7 @@ export function html(app: Application): void {
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="icon" type="image/jpeg" href="https://i.ibb.co/G4vDj7Fm/FB-IMG-1749809298614.jpg">
     <title>${title}</title>
     <script>
     (function() {
