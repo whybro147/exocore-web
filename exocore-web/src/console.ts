@@ -191,8 +191,7 @@ const api: ApiType = {
         api.clearLogFile();
         api.broadcast(`\x1b[36m[SYSTEM] Starting process...\x1b[0m`, wss, false, true);
         isAwaitingInput = false;
-        
-        const originalArgs = args;
+
         let projectPath: string | undefined;
 
         try {
