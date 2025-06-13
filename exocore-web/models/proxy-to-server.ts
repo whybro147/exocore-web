@@ -8,7 +8,14 @@ const routesJsonPath = path.join(__dirname, 'routes.json');
 
 let activeRoutesRouter = Router();
 
-const errorHtmlContent = `<!DOCTYPE html>...`; // unchanged for brevity
+const errorHtmlContent = `<!DOCTYPE html>
+<html>
+<head><title>Service Unavailable</title></head>
+<body>
+  <h1>Service Temporarily Unavailable</h1>
+  <p>The service you're trying to reach is currently unavailable.</p>
+</body>
+</html>`;
 
 function sendErrorHtmlPage(res: Response, statusCode: number = 502) {
   if (res.headersSent) return;
@@ -18,7 +25,7 @@ function sendErrorHtmlPage(res: Response, statusCode: number = 502) {
 interface RouteConfig {
   method: string;
   path: string;
-  port?: number; 
+  port?: number;
 }
 
 interface RoutesFile {
@@ -38,10 +45,15 @@ function loadAndRegisterRoutes() {
         routesData.routes.forEach(route => {
           const method = route.method.trim().toLowerCase();
           const routePath = route.path;
-          const port = route.port || 3000; // ✅ fallback to 3000 if not specified
+          const port = route.port;
 
           if (!routePath || typeof routePath !== 'string') {
             console.warn(`[ProxyToServerTS] Invalid path for method ${route.method}. Skipping.`);
+            return;
+          }
+
+          if (typeof port !== 'number' || port <= 0 || port >= 65536) {
+            console.warn(`[ProxyToServerTS] Invalid or missing port for route "${routePath}". Skipping.`);
             return;
           }
 
@@ -50,7 +62,7 @@ function loadAndRegisterRoutes() {
               const backendRequestPath = req.originalUrl;
               const options: http.RequestOptions = {
                 hostname: 'localhost',
-                port, // ✅ use dynamic port
+                port,
                 path: backendRequestPath,
                 method: req.method,
                 headers: { ...req.headers, 'host': `localhost:${port}` },
@@ -117,7 +129,7 @@ function loadAndRegisterRoutes() {
 
 loadAndRegisterRoutes();
 
-// ✅ File watch for changes
+// Watch for file changes
 if (fs.existsSync(routesJsonPath)) {
   fs.watchFile(routesJsonPath, { interval: 1000 }, (curr, prev) => {
     if (curr.mtime !== prev.mtime) {
@@ -141,7 +153,7 @@ if (fs.existsSync(routesJsonPath)) {
   }, 5000);
 }
 
-// ✅ Middleware export
+// Middleware export
 const mainProxyRouter = Router();
 mainProxyRouter.use((req: Request, res: Response, next: NextFunction) => {
   activeRoutesRouter(req, res, next);
