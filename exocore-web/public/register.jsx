@@ -74,12 +74,23 @@ function App() {
         e.preventDefault();
         setLoading(true);
         setStatus('');
-        const { user, email, pass } = form();
-        if (!user || !email || !pass) {
-            setStatus('Username, Email, and Password are required.');
+        
+        const currentForm = form();
+        const requiredFields = ['user', 'email', 'pass', 'nickname', 'dob', 'country', 'timezone'];
+        const missingFields = requiredFields.filter(field => !currentForm[field]);
+
+        if (missingFields.length > 0) {
+            const fieldNames = missingFields.map(f => {
+                if (f === 'user') return 'Username';
+                if (f === 'pass') return 'Password';
+                if (f === 'dob') return 'Date of Birth';
+                return f.charAt(0).toUpperCase() + f.slice(1);
+            });
+            setStatus(`Please complete all required fields: ${fieldNames.join(', ')}.`);
             setLoading(false);
             return;
         }
+
         if (passwordWarning()) {
             setStatus('Please correct the password issues before submitting.');
             setLoading(false);
@@ -89,7 +100,7 @@ function App() {
             const res = await fetch('/private/server/exocore/web/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(form()),
+                body: JSON.stringify(currentForm),
             });
             const responseData = await res.json();
             if (!res.ok) throw new Error(responseData?.message || `Server error: ${res.status}`);
@@ -118,7 +129,10 @@ function App() {
         setForm((prev) => ({ ...prev, [field]: processedValue }));
     }
 
-    const isSubmitDisabled = () => loading() || !!passwordWarning() || !form().user || !form().email || !form().pass;
+    const isSubmitDisabled = () => {
+        const f = form();
+        return loading() || !!passwordWarning() || !f.user || !f.email || !f.pass || !f.nickname || !f.dob || !f.country || !f.timezone;
+    };
 
     return (
         <div class="register-page-wrapper">
@@ -189,21 +203,29 @@ function App() {
                             <label class="form-label" for="dob">Date of Birth</label>
                             <input id="dob" class="form-input" type="text" placeholder="Select your birth date..." readOnly />
                         </div>
-                        <div class="form-group full-width">
-                             <label class="form-label">Short Bio (optional)</label>
-                             <textarea class="form-textarea" value={form().bio} onInput={(e) => updateField('bio', e.currentTarget.value)} />
+                        <div class="form-group">
+                            <label class="form-label" for="country">Country</label>
+                            <input id="country" class="form-input" type="text" value={form().country} onInput={(e) => updateField('country', e.currentTarget.value)} />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="timezone">Timezone</label>
+                            <input id="timezone" class="form-input" type="text" value={form().timezone} onInput={(e) => updateField('timezone', e.currentTarget.value)} />
+                        </div>
+                         <div class="form-group full-width">
+                            <label class="form-label">Short Bio (optional)</label>
+                            <textarea class="form-textarea" value={form().bio} onInput={(e) => updateField('bio', e.currentTarget.value)} />
                         </div>
                         <div class="form-group full-width">
                              <label class="form-label">Profile Images (Optional)</label>
                              <div class="form-grid">
-                                <button type="button" class="file-upload-btn" onClick={() => avatarInputRef?.click()}>
-                                    <IconUpload />
-                                    <span class="file-name" title={avatarFileName()}>{avatarFileName() || 'Choose Avatar'}</span>
-                                </button>
-                                <button type="button" class="file-upload-btn" onClick={() => coverPhotoInputRef?.click()}>
-                                    <IconUpload />
-                                    <span class="file-name" title={coverPhotoFileName()}>{coverPhotoFileName() || 'Choose Cover Photo'}</span>
-                                </button>
+                                 <button type="button" class="file-upload-btn" onClick={() => avatarInputRef?.click()}>
+                                     <IconUpload />
+                                     <span class="file-name" title={avatarFileName()}>{avatarFileName() || 'Choose Avatar'}</span>
+                                 </button>
+                                 <button type="button" class="file-upload-btn" onClick={() => coverPhotoInputRef?.click()}>
+                                     <IconUpload />
+                                     <span class="file-name" title={coverPhotoFileName()}>{coverPhotoFileName() || 'Choose Cover Photo'}</span>
+                                 </button>
                              </div>
                             <input type="file" accept="image/*" ref={el => avatarInputRef = el} onInput={(e) => handleFileChange('avatar', e)} style={{ display: 'none' }} />
                             <input type="file" accept="image/*" ref={el => coverPhotoInputRef = el} onInput={(e) => handleFileChange('cover_photo', e)} style={{ display: 'none' }} />
