@@ -36,6 +36,7 @@ hljs.registerLanguage('sql', sql_hljs);
 function App() {
   const [loading, setLoading] = createSignal(true);
   const [status, setStatus] = createSignal('');
+  const [notifications, setNotifications] = createSignal([]);
   const [userData, setUserData] = createSignal(null);
   const [files, setFiles] = createSignal([]);
   const [selectedFile, setSelectedFile] = createSignal(null);
@@ -79,6 +80,14 @@ function App() {
 
   const getToken = () => localStorage.getItem('exocore-token') || '';
   const getCookies = () => localStorage.getItem('exocore-cookies') || '';
+
+  const addNotification = (message, type = 'info', duration = 4000) => {
+    const id = Date.now();
+    setNotifications(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, duration);
+  };
 
   function sortFileSystemItems(items) {
     if (!Array.isArray(items)) return [];
@@ -128,8 +137,7 @@ function App() {
         try {
           const errorData = await res.json();
           errorMsg = errorData.message || errorMsg;
-        } catch (parseError) {
-        }
+        } catch (parseError) {}
         throw new Error(errorMsg);
       }
 
@@ -137,11 +145,11 @@ function App() {
 
       if (data.data?.user && data.data.user.verified === 'success') {
         setUserData(data.data.user);
-        setStatus('');
         await fetchFiles('');
       } else {
         setUserData(null);
-        setStatus(data.message || 'User verification failed or user data incomplete. Redirecting to login...');
+        const redirectMsg = data.message || 'User verification failed. Redirecting to login...';
+        setStatus(redirectMsg);
         localStorage.removeItem('exocore-token');
         localStorage.removeItem('exocore-cookies');
         setTimeout(() => {
@@ -151,7 +159,8 @@ function App() {
     } catch (err) {
       setUserData(null);
       const errorMessage = err instanceof Error ? err.message : String(err);
-      setStatus('Failed to fetch user info: ' + errorMessage + '. Redirecting to login...');
+      const redirectMsg = 'Failed to fetch user info: ' + errorMessage + '. Redirecting to login...';
+      setStatus(redirectMsg);
       localStorage.removeItem('exocore-token');
       localStorage.removeItem('exocore-cookies');
       setTimeout(() => {
@@ -201,28 +210,22 @@ function App() {
             [currentPath]: sortFileSystemItems(data.items),
           }));
         } else {
-          setOpenFolders((prev) => ({
-            ...prev,
-            [currentPath]: [],
-          }));
-          setStatus(`Error: Could not load content for folder ${currentPath}. Invalid response.`);
+          setOpenFolders((prev) => ({ ...prev, [currentPath]: [] }));
+          addNotification(`Error: Could not load content for folder ${currentPath}.`, 'error');
         }
       } else {
         if (Array.isArray(data)) {
           setFiles(sortFileSystemItems(data));
         } else {
           setFiles([]);
-          setStatus(`Error: Could not load root directory. Invalid response.`);
+          addNotification(`Error: Could not load root directory.`, 'error');
         }
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      setStatus(`Failed to list ${currentPath || 'root directory'}: ${errorMessage}`);
+      addNotification(`Failed to list ${currentPath || 'root'}: ${errorMessage}`, 'error');
       if (currentPath) {
-        setOpenFolders((prev) => ({
-          ...prev,
-          [currentPath]: undefined,
-        }));
+        setOpenFolders((prev) => ({ ...prev, [currentPath]: undefined }));
       }
     } finally {
       setLoading(false);
@@ -248,7 +251,7 @@ function App() {
       setIsEditingFile(true);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      setStatus('Failed to open file: ' + errorMessage);
+      addNotification('Failed to open file: ' + errorMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -275,10 +278,10 @@ function App() {
       });
       const message = await res.text();
       if (!res.ok) throw new Error(message || `HTTP error! status: ${res.status}`);
-      setStatus(message);
+      addNotification(message, 'success');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      setStatus('Failed to save file: ' + errorMessage);
+      addNotification('Failed to save file: ' + errorMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -317,7 +320,7 @@ function App() {
   async function createFile() {
     const name = newFileName().trim();
     if (!name) {
-      setStatus('Please enter a file name.');
+      addNotification('Please enter a file name.', 'error');
       return;
     }
     setLoading(true);
@@ -331,10 +334,10 @@ function App() {
       if (!res.ok) throw new Error(message || `HTTP error! status: ${res.status}`);
       setNewFileName('');
       await refreshFileSystem(name);
-      setStatus(`File "${name}" created successfully.`);
+      addNotification(`File "${name}" created successfully.`, 'success');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      setStatus('Failed to create file: ' + errorMessage);
+      addNotification('Failed to create file: ' + errorMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -343,7 +346,7 @@ function App() {
   async function createFolder() {
     const name = newFolderName().trim();
     if (!name) {
-      setStatus('Please enter a folder name.');
+      addNotification('Please enter a folder name.', 'error');
       return;
     }
     setLoading(true);
@@ -357,10 +360,10 @@ function App() {
       if (!res.ok) throw new Error(message || `HTTP error! status: ${res.status}`);
       setNewFolderName('');
       await refreshFileSystem(name);
-      setStatus(`Folder "${name}" created successfully.`);
+      addNotification(`Folder "${name}" created successfully.`, 'success');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      setStatus('Failed to create folder: ' + errorMessage);
+      addNotification('Failed to create folder: ' + errorMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -381,10 +384,10 @@ function App() {
       const message = await res.text();
       if (!res.ok) throw new Error(message || `HTTP error! status: ${res.status}`);
       await refreshFileSystem(targetPathForUpload);
-      setStatus(`File "${fileToUpload.name}" uploaded successfully.`);
+      addNotification(`File "${fileToUpload.name}" uploaded successfully.`, 'success');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      setStatus('Failed to upload file: ' + errorMessage);
+      addNotification('Failed to upload file: ' + errorMessage, 'error');
     } finally {
       setLoading(false);
       e.target.value = null;
@@ -404,7 +407,7 @@ function App() {
     document.body.appendChild(form);
     form.submit();
     document.body.removeChild(form);
-    setStatus(`Downloading "${file}"...`);
+    addNotification(`Downloading "${file}"...`, 'info');
   }
 
   function toggleFolder(folderPath) {
@@ -490,12 +493,12 @@ function App() {
         } catch (e) { }
         throw new Error(errorMsg || `HTTP error! status: ${res.status}`);
       }
-      setStatus(message);
+      addNotification(message, 'success');
       await refreshFileSystem(zipFilePath);
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      setStatus(`Failed to unzip "${fileToUnzip.name}": ${errorMessage}`);
+      addNotification(`Failed to unzip "${fileToUnzip.name}": ${errorMessage}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -540,7 +543,7 @@ function App() {
         } catch (e) { }
         throw new Error(errorMsg || `HTTP error! status: ${res.status}`);
       }
-      setStatus(message || `Successfully deleted "${fileToDelete.name}".`);
+      addNotification(message || `Successfully deleted "${fileToDelete.name}".`, 'success');
 
       if (selectedFile() && selectedFile().startsWith(fileToDelete.path)) {
         closeFileEditor();
@@ -560,7 +563,7 @@ function App() {
       await refreshFileSystem(fileToDelete.path);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      setStatus(`Failed to delete "${fileToDelete.name}": ${errorMessage}`);
+      addNotification(`Failed to delete "${fileToDelete.name}": ${errorMessage}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -575,7 +578,7 @@ function App() {
     const newName = renameContainerInfo().newName.trim();
 
     if (!fileToRename || !newName) {
-      setStatus('Invalid rename operation. New name cannot be empty.');
+      addNotification('Invalid rename operation. New name cannot be empty.', 'error');
       cancelRename();
       return;
     }
@@ -586,7 +589,7 @@ function App() {
       const newPath = parentPath ? `${parentPath}/${newName}` : newName;
 
       if (oldPath === newPath) {
-        setStatus('No change detected. Renaming cancelled.');
+        addNotification('No change detected. Renaming cancelled.', 'info');
         cancelRename();
         setLoading(false);
         return;
@@ -606,7 +609,7 @@ function App() {
         } catch (e) { }
         throw new Error(errorMsg || `HTTP error! status: ${res.status}`);
       }
-      setStatus(`Renamed "${fileToRename.name}" to "${newName}" successfully.`);
+      addNotification(`Renamed "${fileToRename.name}" to "${newName}" successfully.`, 'success');
 
       if (fileToRename.isDir && openFolders()[oldPath]) {
         const contents = openFolders()[oldPath];
@@ -635,7 +638,7 @@ function App() {
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      setStatus('Failed to rename: ' + errorMessage);
+      addNotification('Failed to rename: ' + errorMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -672,7 +675,7 @@ function App() {
     const newItemNameTrimmed = itemName.trim();
 
     if (!newItemNameTrimmed) {
-      setStatus(`Please enter a ${isDir ? 'folder' : 'file'} name.`);
+      addNotification(`Please enter a ${isDir ? 'folder' : 'file'} name.`, 'error');
       return;
     }
     const fullPath = parentPath ? `${parentPath}/${newItemNameTrimmed}` : newItemNameTrimmed;
@@ -694,7 +697,7 @@ function App() {
         } catch (e) { }
         throw new Error(errorMsg || `HTTP error! status: ${res.status}`);
       }
-      setStatus(`${isDir ? 'Folder' : 'File'} "${newItemNameTrimmed}" created successfully in "${parentPath || 'root'}".`);
+      addNotification(`${isDir ? 'Folder' : 'File'} "${newItemNameTrimmed}" created successfully in "${parentPath || 'root'}".`, 'success');
       cancelCreateItem();
       await refreshFileSystem(fullPath);
       if (parentPath) {
@@ -702,7 +705,7 @@ function App() {
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      setStatus(`Failed to create ${isDir ? 'folder' : 'file'}: ${errorMessage}`);
+      addNotification(`Failed to create ${isDir ? 'folder' : 'file'}: ${errorMessage}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -828,7 +831,7 @@ function App() {
     document.body.appendChild(form);
     form.submit();
     document.body.removeChild(form);
-    setStatus('Downloading all files (root) as ZIP...');
+    addNotification('Downloading all files (root) as ZIP...', 'info');
   }
 
   const getCodeMirrorLanguageSupport = (filename) => {
@@ -1009,6 +1012,43 @@ function App() {
     itemHoverBg: 'rgba(51, 65, 85, 0.7)',
     shadow: '0 6px 16px rgba(0, 0, 0, 0.4)',
     itemSelectedBg: '#38BDF8',
+    notificationSuccess: '#10B981',
+    notificationError: '#F43F5E',
+    notificationInfo: '#38BDF8',
+  };
+
+  const NotificationContainer = () => {
+    const baseStyle = {
+        padding: '1rem 1.5rem',
+        'margin-bottom': '0.75rem',
+        'border-radius': theme.borderRadius,
+        color: 'white',
+        'font-size': '1.05rem',
+        'box-shadow': '0 4px 10px rgba(0,0,0,0.3)',
+        'font-family': theme.fontFamily,
+        'letter-spacing': '0.5px',
+        transition: 'transform 0.3s ease-out, opacity 0.3s ease-out',
+        transform: 'translateX(0)',
+        opacity: 1,
+    };
+
+    const typeStyles = {
+        success: { 'background-color': theme.notificationSuccess },
+        error: { 'background-color': theme.notificationError },
+        info: { 'background-color': theme.notificationInfo, color: theme.primaryText },
+    };
+
+    return (
+        <div style={{ position: 'fixed', top: '20px', right: '20px', 'z-index': '2000', width: '350px', 'max-width': '90%' }}>
+            <For each={notifications()}>
+                {notification => (
+                    <div style={{ ...baseStyle, ...typeStyles[notification.type] }}>
+                        {notification.message}
+                    </div>
+                )}
+            </For>
+        </div>
+    );
   };
 
   const baseButtonStyle = {
@@ -1112,6 +1152,7 @@ function App() {
 
   return (
     <div style={{ 'font-size': '1.1rem', background: theme.bg, color: theme.text, 'min-height': '100vh', padding: '25px', 'box-sizing': 'border-box' }}>
+      <NotificationContainer />
       <h2 style={{ color: theme.primary, 'font-size': '2.8rem', 'margin-bottom': '25px', 'text-align': 'center', 'letter-spacing': '1px' }}>
         📁 ExoCore Explorer 📂
       </h2>
