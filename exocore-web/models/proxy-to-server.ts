@@ -10,7 +10,6 @@ const routesJsonDir = path.dirname(routesJsonPath);
 
 let activeRoutesRouter = Router();
 
-// --- Error Page ---
 const errorHtmlContent = `<!DOCTYPE html>
 <html><head><title>Server Error</title></head>
 <body style="font-family: sans-serif; text-align: center; margin-top: 10%;">
@@ -23,27 +22,20 @@ function sendErrorHtmlPage(res: Response, statusCode: number = 502) {
   res.status(statusCode).type('text/html').send(errorHtmlContent);
 }
 
-// --- Type Definitions ---
 interface RouteConfig {
   method: string;
   path: string;
-  port: number; // port is now non-optional
+  port: number;
 }
 
 interface RoutesFile {
   routes: RouteConfig[];
 }
 
-// --- State Management ---
 let allRoutes: RouteConfig[] = [];
 let portOnlineStatus: Record<number, boolean> = {};
 let isCheckingPorts = false;
 
-// --- Core Functions ---
-
-/**
- * Checks if a given port on localhost is responsive.
- */
 async function isPortOnline(port: number): Promise<boolean> {
   return new Promise(resolve => {
     const req = http.request({ hostname: 'localhost', port, method: 'HEAD', timeout: 500 }, () => {
@@ -59,14 +51,10 @@ async function isPortOnline(port: number): Promise<boolean> {
   });
 }
 
-/**
- * Rebuilds the active Express router based on the current online status of ports.
- */
 function rebuildActiveRouter() {
   const newRouter = Router();
 
   allRoutes.forEach(route => {
-    // Only add route if its corresponding port is online
     if (!portOnlineStatus[route.port]) {
       return;
     }
@@ -83,15 +71,17 @@ function rebuildActiveRouter() {
           headers: { ...req.headers, host: `localhost:${route.port}` }
         };
         
-        // The 'connection' header is deprecated and can cause issues with proxies.
-        if (options.headers?.connection) {
-            delete options.headers.connection;
+        if (options.headers) {
+            const headers = options.headers as http.OutgoingHttpHeaders;
+            if (headers.connection) {
+                delete headers.connection;
+            }
         }
 
         const backendRequest = http.request(options, backendResponse => {
           if (backendResponse.statusCode && backendResponse.statusCode >= 400) {
             sendErrorHtmlPage(res, backendResponse.statusCode);
-            backendResponse.resume(); // Consume response data to free up memory
+            backendResponse.resume();
             return;
           }
 
@@ -112,10 +102,6 @@ function rebuildActiveRouter() {
   console.log('[ProxyToServerTS] ✅ Router rebuilt successfully.');
 }
 
-/**
- * Loads and validates routes from the routes.json file.
- * Triggers a port check and router rebuild upon successful load.
- */
 function loadRoutesFromFile() {
   try {
     console.log(`[ProxyToServerTS] Attempting to load routes from ${routesJsonPath}`);
@@ -123,7 +109,7 @@ function loadRoutesFromFile() {
       console.warn(`[ProxyToServerTS] 🟡 routes.json not found. Waiting for the file to be created...`);
       allRoutes = [];
       portOnlineStatus = {};
-      rebuildActiveRouter(); // Rebuild with empty routes
+      rebuildActiveRouter();
       return;
     }
 
@@ -135,7 +121,6 @@ function loadRoutesFromFile() {
         return;
     }
 
-    // Filter and map routes, ensuring they are valid
     allRoutes = parsed.routes.map(route => ({
         method: (route.method || '').toLowerCase(),
         path: route.path,
@@ -149,23 +134,17 @@ function loadRoutesFromFile() {
     });
 
     console.log(`[ProxyToServerTS] ✔️ Loaded ${allRoutes.length} routes from file.`);
-    // Immediately check ports and rebuild the router with the new configuration
     checkAllPorts();
 
   } catch (err) {
     console.error(`[ProxyToServerTS] ❌ Error loading or parsing routes.json: ${(err as Error).message}`);
-    // Clear routes if file is corrupt to prevent crashes
     allRoutes = [];
     rebuildActiveRouter();
   }
 }
 
-/**
- * Checks the status of all unique ports defined in the routes.
- * Rebuilds the router if any port's status has changed.
- */
 async function checkAllPorts() {
-  if (isCheckingPorts) return; // Prevent concurrent checks
+  if (isCheckingPorts) return;
   isCheckingPorts = true;
 
   const uniquePorts = [...new Set(allRoutes.map(route => route.port))];
@@ -173,7 +152,6 @@ async function checkAllPorts() {
   
   const newPortStatus: Record<number, boolean> = {};
 
-  // Check all unique ports concurrently for better performance
   await Promise.all(uniquePorts.map(async (port) => {
     const isOnline = await isPortOnline(port);
     newPortStatus[port] = isOnline;
@@ -184,7 +162,6 @@ async function checkAllPorts() {
     }
   }));
 
-  // Also detect if a port was removed from the config
   if (Object.keys(portOnlineStatus).length !== Object.keys(newPortStatus).length) {
     hasStateChanged = true;
   }
@@ -199,27 +176,20 @@ async function checkAllPorts() {
   isCheckingPorts = false;
 }
 
-/**
- * Sets up the file watcher and the periodic port check interval.
- */
 function setupWatcherAndInterval() {
-  // Watch the DIRECTORY for changes to handle file creation/deletion
   fs.watch(routesJsonDir, { persistent: true }, (eventType, filename) => {
-    // Check if the change is related to our routes.json file
     if (filename === routesJsonFile) {
       console.log(`[ProxyToServerTS] 🔄 Change detected in ${routesJsonFile}. Reloading...`);
       loadRoutesFromFile();
     }
   });
 
-  setInterval(checkAllPorts, 2000); // Check every 2 seconds to reduce load
+  setInterval(checkAllPorts, 2000);
 }
 
-// --- Initial Execution ---
 loadRoutesFromFile();
 setupWatcherAndInterval();
 
-// --- Middleware Export ---
 const mainProxyRouter = Router();
 mainProxyRouter.use((req: Request, res: Response, next: NextFunction) => {
   activeRoutesRouter(req, res, next);
