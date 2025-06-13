@@ -292,11 +292,8 @@ const api: ApiType = {
                 isRunning = false;
                 processInstance = null;
                 isAwaitingInput = false;
-
-                if (code === 1) {
-                    api.broadcast(`\x1b[33m[SYSTEM] Process exited with code 1. Restarting...\x1b[0m`, wss, false, false);
-                    setTimeout(() => api.restart(wss, originalArgs), 1000);
-                }
+                const exitReason = signal ? `signal ${signal}` : `code ${code}`;
+                api.broadcast(`\x1b[33m[SYSTEM] Process exited with ${exitReason}. It will not be restarted automatically.\x1b[0m`, wss, false, false);
             });
 
             processInstance.on("error", (err: Error) => {
