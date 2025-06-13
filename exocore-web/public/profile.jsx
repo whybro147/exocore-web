@@ -11,7 +11,6 @@ const getBasename = (filePath) => {
     return parts[parts.length - 1] || '';
 };
 
-// Modified to accept extension for source and displayName for alt text
 const getSkillIcon = (extension, displayName) => {
     const iconPath = `/private/server/exocore/web/public/icons/${extension.toLowerCase()}.svg`;
     return (
@@ -27,7 +26,6 @@ const getSkillIcon = (extension, displayName) => {
     );
 };
 
-// Define planStylesConfig outside the component to avoid re-creation on every render
 const planStylesConfig = {
     "Core Access": {
         textGrad1: '#D0A9F5', textGrad2: '#E8D4F7', cardGrad1: '#6A0DAD', cardGrad2: '#A74AC7',
@@ -78,7 +76,9 @@ function App() {
     const getCookies = () => localStorage.getItem('exocore-cookies') || '';
 
     async function fetchUserInfo() {
-        setLoading(true);
+        // Don't set loading to true here if it's a re-fetch,
+        // it will be handled by the calling function.
+        // setLoading(true); 
         const token = getToken();
         const cookies = getCookies();
 
@@ -105,32 +105,8 @@ function App() {
             const data = await res.json();
             if (data.data?.user && data.data.user.verified === 'success') {
                 setUserData(data.data.user);
-                setStatus({ type: '', message: '' });
-
-                try {
-                    const skillsRes = await fetch('/private/server/exocore/web/skills', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({})
-                    });
-
-                    if (skillsRes.ok) {
-                        const skillsData = await skillsRes.json();
-                        if (skillsData && skillsData.length > 0) {
-                            setProjectSkills(skillsData[0]);
-                        } else {
-                            console.warn("Skills data is empty or malformed.");
-                            setProjectSkills(null);
-                        }
-                    } else {
-                        console.error("Failed to fetch skills:", skillsRes.status);
-                        setProjectSkills(null);
-                    }
-                } catch (skillsErr) {
-                    console.error("Error fetching skills:", skillsErr);
-                    setProjectSkills(null);
-                }
-
+                // fetch skills only if user data is successfully fetched
+                fetchSkills();
             } else {
                 setUserData(null);
                 setStatus({ type: 'error', message: data.message || 'User verification failed. Redirecting...' });
@@ -145,33 +121,69 @@ function App() {
         }
     }
 
-    function uploadBase64Image(base64, field) {
-        setLoading(true);
-        const token = getToken();
-        const cookies = getCookies();
-        fetch('/private/server/exocore/web/userinfoEdit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token, cookies, field, edit: base64 }),
-        })
-        .then((res) => res.json())
-        .then((data) => {
-            if (data.user) {
-                setUserData(data.user);
-                setStatus({ type: 'success', message: 'Image updated!' });
+    async function fetchSkills() {
+        try {
+            const skillsRes = await fetch('/private/server/exocore/web/skills', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+
+            if (skillsRes.ok) {
+                const skillsData = await skillsRes.json();
+                setProjectSkills(skillsData && skillsData.length > 0 ? skillsData[0] : null);
             } else {
-                setStatus({ type: 'error', message: data.message || 'Image upload failed.' });
+                console.error("Failed to fetch skills:", skillsRes.status);
+                setProjectSkills(null);
             }
-        })
-        .catch((err) => setStatus({ type: 'error', message: 'Upload error: ' + err.message }))
-        .finally(() => {
-            setLoading(false);
-            setModalOpen(false);
-            setTimeout(() => setStatus({ type: '', message: '' }), 3000);
-        });
+        } catch (skillsErr) {
+            console.error("Error fetching skills:", skillsErr);
+            setProjectSkills(null);
+        }
     }
 
-    function openImageModal(src, field) {
+    async function handleUpdate(field, value, endEditStateFn) {
+        setLoading(true);
+        setModalOpen(false); // Close modal if open
+
+        const token = getToken();
+        const cookies = getCookies();
+
+        try {
+            const res = await fetch('/private/server/exocore/web/userinfoEdit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token, cookies, field, edit: value }),
+            });
+
+            const data = await res.json();
+
+            // Check if the response is NOT OK or if there's an explicit error message
+            if (!res.ok || data.success === false) {
+                throw new Error(data.message || 'An unknown error occurred.');
+            }
+
+            // SUCCESS!
+            setStatus({ type: 'success', message: data.message || 'Update successful!' });
+            setTimeout(() => setStatus({ type: '', message: '' }), 3000);
+
+            // Re-fetch the single source of truth to ensure UI is in sync.
+            await fetchUserInfo();
+
+            if (endEditStateFn) {
+                endEditStateFn(false);
+            }
+
+        } catch (err) {
+            setStatus({ type: 'error', message: 'Update failed: ' + err.message });
+            setTimeout(() => setStatus({ type: '', message: '' }), 3000);
+        } finally {
+            // Loading is set to false inside fetchUserInfo's finally block
+            // setLoading(false);
+        }
+    }
+
+    function openImageModal(field) {
         setModalAction(() => () => {
             const input = document.createElement('input');
             input.type = 'file';
@@ -179,14 +191,17 @@ function App() {
             input.onchange = (e) => {
                 const file = e.target.files[0];
                 if (file) {
-                    if (file.size > 10 * 1024 * 1024) {
+                    if (file.size > 10 * 1024 * 1024) { // 10MB limit
                         setStatus({ type: 'error', message: 'Max file size: 10MB.' });
                         setTimeout(() => setStatus({ type: '', message: '' }), 3000);
                         return;
                     }
                     const reader = new FileReader();
-                    reader.onload = () => uploadBase64Image(reader.result, field);
-                    reader.onerror = () => setStatus({ type: 'error', message: 'Error reading file.' });
+                    reader.onload = () => handleUpdate(field, reader.result);
+                    reader.onerror = () => {
+                        setStatus({ type: 'error', message: 'Error reading file.' });
+                        setTimeout(() => setStatus({ type: '', message: '' }), 3000);
+                    }
                     reader.readAsDataURL(file);
                 }
             };
@@ -195,39 +210,13 @@ function App() {
         setModalOpen(true);
     }
 
-    function handleSaveText(field, value, setEditState) {
+    onMount(() => {
         setLoading(true);
-        const token = getToken();
-        const cookies = getCookies();
-        fetch('/private/server/exocore/web/userinfoEdit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token, cookies, field, edit: value }),
-        })
-        .then((res) => res.json())
-        .then((data) => {
-            if (data.user) {
-                setUserData(data.user);
-                if (field === 'nickname') setNickname(data.user.nickname || '');
-                if (field === 'bio') setBio(data.user.bio || '');
-                setStatus({ type: 'success', message: 'Changes saved!' });
-            } else {
-                setStatus({ type: 'error', message: data.message || 'Failed to save.' });
-            }
-        })
-        .catch((err) => setStatus({ type: 'error', message: 'Save error: ' + err.message }))
-        .finally(() => {
-            setEditState(false);
-            setLoading(false);
-            setTimeout(() => setStatus({ type: '', message: '' }), 3000);
-        });
-    }
-
-    onMount(fetchUserInfo);
+        fetchUserInfo();
+    });
 
     const Spinner = () => <div class="spinner"></div>;
 
-    // Derived signal for active plan styles
     const activePlanStyles = () => {
         const planName = userData()?.activePlan?.plan;
         return planStylesConfig[planName] || defaultPlanStyle;
@@ -236,6 +225,7 @@ function App() {
     return (
         <>
             <style>{`
+                /* ... (Yung CSS mo dito, walang pagbabago) ... */
                 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
 
                 :root {
@@ -264,12 +254,11 @@ function App() {
                 .nickname-container { display: flex; align-items: center; justify-content: center; gap: .75rem; min-height: 42px; }
                 .nickname-text { font-size: 2rem; font-weight: 700; color: var(--text-primary); }
                 .user-details { color: var(--text-secondary); margin: 0.25rem 0 1.5rem 0; }
-
-                /* Styles for active plan */
+                
                 .active-plan-container {
                     display: inline-flex;
                     align-items: center;
-                    color: #fff; /* Default color, can be overridden by dynamic style */
+                    color: #fff;
                     padding: 0.3rem 0.8rem;
                     border-radius: 15px;
                     font-size: 0.85rem;
@@ -277,7 +266,6 @@ function App() {
                     margin-top: -0.5rem;
                     margin-bottom: 1.5rem;
                     box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-                    /* Dynamic styles will be applied here */
                 }
                 .active-plan-container span {
                     margin-left: 0.3rem;
@@ -378,7 +366,6 @@ function App() {
                     font-size: 0.85rem;
                     color: var(--text-secondary);
                 }
-
                 .skill-percentage-bar {
                     position: absolute;
                     bottom: 0;
@@ -389,7 +376,6 @@ function App() {
                     border-bottom-right-radius: var(--radius-inner);
                     transition: width 0.3s ease-out;
                 }
-
 
                 @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
                 @keyframes slideInUp{ from { opacity:0; transform:translateY(20px) } to { opacity:1; transform:translateY(0) } }
@@ -436,10 +422,10 @@ function App() {
                         <Show when={loading()}><div class="loading-overlay"><Spinner/></div></Show>
 
                         <div class="profile-header">
-                            <img class="cover-photo" src={userData()?.cover_photo || `https://source.unsplash.com/random/1600x600/?abstract,dark`} alt="Cover photo" onClick={() => openImageModal(userData()?.cover_photo, 'cover_photo')} />
+                            <img class="cover-photo" src={userData()?.cover_photo || `https://source.unsplash.com/random/1600x600/?abstract,dark`} alt="Cover photo" onClick={() => openImageModal('cover_photo')} />
                         </div>
 
-                        <img class="avatar" src={userData()?.avatar || `https://api.dicebear.com/8.x/initials/svg?seed=${encodeURIComponent(userData()?.user || 'U')}`} alt="User avatar" onClick={() => openImageModal(userData()?.avatar, 'avatar')} />
+                        <img class="avatar" src={userData()?.avatar || `https://api.dicebear.com/8.x/initials/svg?seed=${encodeURIComponent(userData()?.user || 'U')}`} alt="User avatar" onClick={() => openImageModal('avatar')} />
 
                         <div class="profile-body">
                             <div class="nickname-container">
@@ -455,21 +441,19 @@ function App() {
                                         <input type="text" value={nickname()} onInput={(e) => setNickname(e.currentTarget.value)} />
                                         <div class="edit-controls-buttons">
                                             <button class="btn btn-secondary" onClick={() => setEditingNickname(false)}>Cancel</button>
-                                            <button class="btn btn-primary" onClick={() => handleSaveText('nickname', nickname(), setEditingNickname)}>Save</button>
+                                            <button class="btn btn-primary" onClick={() => handleUpdate('nickname', nickname(), setEditingNickname)}>Save</button>
                                         </div>
                                     </div>
                                 </Show>
                             </div>
                             <p class="user-details">@{userData()?.user} &bull; ID: {userData()?.id}</p>
 
-                            {/* New section for displaying the active plan */}
                             <Show when={userData()?.activePlan?.plan}>
                                 <div class="active-plan-container" style={{
-                                    backgroundColor: activePlanStyles().cardGrad1, // Use cardGrad1 for background
-                                    color: activePlanStyles().textColor, // Use textColor for text
+                                    backgroundColor: activePlanStyles().cardGrad1,
+                                    color: activePlanStyles().textColor,
                                     border: `1px solid ${activePlanStyles().cardBorder}`,
                                     boxShadow: `0 2px 8px ${activePlanStyles().glowColor}`
-                                    // You can add more styles here if needed, e.g., gradient for text
                                 }}>
                                     {userData()?.activePlan?.plan} 
                                 </div>
@@ -490,7 +474,7 @@ function App() {
                                         <textarea rows="4" value={bio()} onInput={(e) => setBio(e.currentTarget.value)}></textarea>
                                         <div class="edit-controls-buttons">
                                             <button class="btn btn-secondary" onClick={() => setEditingBio(false)}>Cancel</button>
-                                            <button class="btn btn-primary" onClick={() => handleSaveText('bio', bio(), setEditingBio)}>Save Bio</button>
+                                            <button class="btn btn-primary" onClick={() => handleUpdate('bio', bio(), setEditingBio)}>Save Bio</button>
                                         </div>
                                     </div>
                                 </Show>
