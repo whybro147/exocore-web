@@ -186,7 +186,7 @@ function setupWatcherAndInterval() {
     }
   });
 
-  setInterval(checkPortStatus, 2000);
+  setInterval(checkPortStatus, 30000);
 }
 
 loadRoutesFromFile();
