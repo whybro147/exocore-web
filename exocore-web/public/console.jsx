@@ -203,7 +203,11 @@ function App() {
                         scrollToBottom();
                     }
                 } catch (error) {
-                    addLog(e.data);
+                    if (typeof e.data === 'string') {
+                        addLog(e.data.trim());
+                    } else {
+                        addLog(e.data);
+                    }
                 }
             };
         }
@@ -215,48 +219,48 @@ function App() {
     return (
         <div class="main-wrapper">
             <style>{`
-              :root {
-                --bg-primary: #111217; --bg-secondary: #1a1b23; --bg-tertiary: #0D0E12;
-                --text-primary: #e0e0e0; --text-secondary: #8a8f98;
-                --border-color: rgba(255, 255, 255, 0.1); --shadow-color: rgba(0, 0, 0, 0.5);
-                --font-body: 'Roboto', sans-serif; --font-console: 'Fira Code', monospace;
-                --radius-main: 16px; --radius-inner: 10px;
-                --btn-start-bg: #28a745; --btn-start-hover: #218838;
-                --btn-restart-bg: #007bff; --btn-restart-hover: #0069d9;
-                --btn-stop-bg: #dc3545; --btn-stop-hover: #c82333;
-                --success-color: #2ecc71; --warning-color: #f39c12; --error-color: #e74c3c;
-                --system-message-color: #3498db;
-              }
-              body { background-color: var(--bg-primary); color: var(--text-primary); font-family: var(--font-body); margin: 0; }
-              .main-wrapper { display: flex; justify-content: center; align-items: center; padding: 4vh 2vw; min-height: 100vh; }
-              .app-container { background: var(--bg-secondary); padding: 2rem; width: 100%; max-width: 800px; border-radius: var(--radius-main); border: 1px solid var(--border-color); box-shadow: 0 15px 40px var(--shadow-color); display: flex; flex-direction: column; gap: 1.5rem; }
-              .greeting-header { text-align: center; }
-              .greeting { font-size: 2.25rem; font-weight: 700; color: #fff; letter-spacing: -1px; }
-              .user-welcome { font-size: 1rem; color: var(--text-secondary); margin-top: 0.25rem; }
-              .console-wrapper { border-radius: var(--radius-inner); background: var(--bg-tertiary); box-shadow: inset 0 4px 15px rgba(0,0,0,0.4); overflow: hidden; display: flex; flex-direction: column; height: 450px; border: 1px solid var(--border-color); position: relative; }
-              .console-wrapper:fullscreen { width: 100vw; height: 100vh; border-radius: 0; border: none; }
-              .console-header { background: var(--bg-secondary); padding: 0.6rem 1rem; display: flex; align-items: center; border-bottom: 1px solid var(--border-color); position: relative; }
-              .console-header-dots { display: flex; gap: 8px; }
-              .console-header-dots span { width: 12px; height: 12px; border-radius: 50%; }
-              .console-header-dots .red-dot { background-color: #ff5f57; }
-              .console-header-dots .yellow-dot { background-color: #ffbd2e; }
-              .console-header-dots .green-dot { background-color: #28c940; }
-              .fullscreen-btn { position: absolute; top: 50%; right: 1rem; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 4px; border-radius: 4px; display: flex; }
-              .fullscreen-btn:hover { color: var(--text-primary); background-color: rgba(255,255,255,0.1); }
-              .console-container { flex-grow: 1; color: var(--text-primary); font-family: var(--font-console); font-size: 14px; line-height: 1.6; padding: 1rem; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
-              .input-prompt-line { display: flex; }
-              .input-prompt-line span:first-child { color: var(--accent-primary); margin-right: 0.5ch; }
-              .input-prompt-line input { flex-grow: 1; background: transparent; border: none; color: var(--text-primary); font-family: var(--font-console); font-size: 14px; outline: none; padding: 0; }
-              .controls { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; }
-              .btn { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 1.5rem; font-size: 0.95rem; color: #fff; border: none; border-radius: var(--radius-inner); cursor: pointer; transition: all 0.2s ease; font-weight: 500; }
-              .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-              .btn:active { transform: translateY(0); box-shadow: none; }
-              .btn.start-btn { background-color: var(--btn-start-bg); }
-              .btn.start-btn:hover { background-color: var(--btn-start-hover); }
-              .btn.restart-btn { background-color: var(--btn-restart-bg); }
-              .btn.restart-btn:hover { background-color: var(--btn-restart-hover); }
-              .btn.stop-btn { background-color: var(--btn-stop-bg); }
-              .btn.stop-btn:hover { background-color: var(--btn-stop-hover); }
+                  :root {
+                      --bg-primary: #111217; --bg-secondary: #1a1b23; --bg-tertiary: #0D0E12;
+                      --text-primary: #e0e0e0; --text-secondary: #8a8f98;
+                      --border-color: rgba(255, 255, 255, 0.1); --shadow-color: rgba(0, 0, 0, 0.5);
+                      --font-body: 'Roboto', sans-serif; --font-console: 'Fira Code', monospace;
+                      --radius-main: 16px; --radius-inner: 10px;
+                      --btn-start-bg: #28a745; --btn-start-hover: #218838;
+                      --btn-restart-bg: #007bff; --btn-restart-hover: #0069d9;
+                      --btn-stop-bg: #dc3545; --btn-stop-hover: #c82333;
+                      --success-color: #2ecc71; --warning-color: #f39c12; --error-color: #e74c3c;
+                      --system-message-color: #3498db;
+                  }
+                  body { background-color: var(--bg-primary); color: var(--text-primary); font-family: var(--font-body); margin: 0; }
+                  .main-wrapper { display: flex; justify-content: center; align-items: center; padding: 4vh 2vw; min-height: 100vh; }
+                  .app-container { background: var(--bg-secondary); padding: 2rem; width: 100%; max-width: 800px; border-radius: var(--radius-main); border: 1px solid var(--border-color); box-shadow: 0 15px 40px var(--shadow-color); display: flex; flex-direction: column; gap: 1.5rem; }
+                  .greeting-header { text-align: center; }
+                  .greeting { font-size: 2.25rem; font-weight: 700; color: #fff; letter-spacing: -1px; }
+                  .user-welcome { font-size: 1rem; color: var(--text-secondary); margin-top: 0.25rem; }
+                  .console-wrapper { border-radius: var(--radius-inner); background: var(--bg-tertiary); box-shadow: inset 0 4px 15px rgba(0,0,0,0.4); overflow: hidden; display: flex; flex-direction: column; height: 450px; border: 1px solid var(--border-color); position: relative; }
+                  .console-wrapper:fullscreen { width: 100vw; height: 100vh; border-radius: 0; border: none; }
+                  .console-header { background: var(--bg-secondary); padding: 0.6rem 1rem; display: flex; align-items: center; border-bottom: 1px solid var(--border-color); position: relative; }
+                  .console-header-dots { display: flex; gap: 8px; }
+                  .console-header-dots span { width: 12px; height: 12px; border-radius: 50%; }
+                  .console-header-dots .red-dot { background-color: #ff5f57; }
+                  .console-header-dots .yellow-dot { background-color: #ffbd2e; }
+                  .console-header-dots .green-dot { background-color: #28c940; }
+                  .fullscreen-btn { position: absolute; top: 50%; right: 1rem; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 4px; border-radius: 4px; display: flex; }
+                  .fullscreen-btn:hover { color: var(--text-primary); background-color: rgba(255,255,255,0.1); }
+                  .console-container { flex-grow: 1; color: var(--text-primary); font-family: var(--font-console); font-size: 14px; line-height: 1.6; padding: 1rem; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+                  .input-prompt-line { display: flex; }
+                  .input-prompt-line span:first-child { color: var(--accent-primary); margin-right: 0.5ch; }
+                  .input-prompt-line input { flex-grow: 1; background: transparent; border: none; color: var(--text-primary); font-family: var(--font-console); font-size: 14px; outline: none; padding: 0; }
+                  .controls { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; }
+                  .btn { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 1.5rem; font-size: 0.95rem; color: #fff; border: none; border-radius: var(--radius-inner); cursor: pointer; transition: all 0.2s ease; font-weight: 500; }
+                  .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+                  .btn:active { transform: translateY(0); box-shadow: none; }
+                  .btn.start-btn { background-color: var(--btn-start-bg); }
+                  .btn.start-btn:hover { background-color: var(--btn-start-hover); }
+                  .btn.restart-btn { background-color: var(--btn-restart-bg); }
+                  .btn.restart-btn:hover { background-color: var(--btn-restart-hover); }
+                  .btn.stop-btn { background-color: var(--btn-stop-bg); }
+                  .btn.stop-btn:hover { background-color: var(--btn-stop-hover); }
             `}</style>
             <Show when={initialLoadComplete()} fallback={<div>Initializing...</div>}>
                 <Show when={userData()} fallback={<div>Redirecting to login...</div>}>
