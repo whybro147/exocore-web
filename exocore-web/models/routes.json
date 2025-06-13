@@ -1,8 +1,0 @@
-{
-  "routes": [
-    {
-      "method": "GET",
-      "path": "/home"
-    }
-  ]
-}
