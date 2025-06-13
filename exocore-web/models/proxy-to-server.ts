@@ -25,16 +25,17 @@ function sendErrorHtmlPage(res: Response, statusCode: number = 502) {
 interface RouteConfig {
   method: string;
   path: string;
-  port: number;
 }
 
 interface RoutesFile {
+  port: number;
   routes: RouteConfig[];
 }
 
 let allRoutes: RouteConfig[] = [];
+let currentProxyPort: number | null = null;
 let portOnlineStatus: Record<number, boolean> = {};
-let isCheckingPorts = false;
+let isCheckingPort = false;
 
 async function isPortOnline(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -54,21 +55,24 @@ async function isPortOnline(port: number): Promise<boolean> {
 function rebuildActiveRouter() {
   const newRouter = Router();
 
-  allRoutes.forEach(route => {
-    if (!portOnlineStatus[route.port]) {
-      return;
-    }
+  if (!currentProxyPort || !portOnlineStatus[currentProxyPort]) {
+    activeRoutesRouter = newRouter;
+    console.log('[ProxyToServerTS] ✅ Router is active but empty (backend port is offline or not configured).');
+    return;
+  }
 
+  allRoutes.forEach(route => {
     const method = route.method.trim().toLowerCase();
 
     if (typeof (newRouter as any)[method] === 'function') {
       (newRouter as any)[method](route.path, (req: Request, res: Response) => {
+        const targetPort = currentProxyPort as number;
         const options: http.RequestOptions = {
           hostname: 'localhost',
-          port: route.port,
+          port: targetPort,
           path: req.originalUrl,
           method: req.method,
-          headers: { ...req.headers, host: `localhost:${route.port}` }
+          headers: { ...req.headers, host: `localhost:${targetPort}` }
         };
         
         if (options.headers) {
@@ -90,7 +94,7 @@ function rebuildActiveRouter() {
         });
 
         backendRequest.on('error', (err) => {
-          console.error(`[ProxyToServerTS] Backend request error for port ${route.port}:`, err.message);
+          console.error(`[ProxyToServerTS] Backend request error for port ${targetPort}:`, err.message);
           sendErrorHtmlPage(res, 503)
         });
         req.pipe(backendRequest);
@@ -99,7 +103,7 @@ function rebuildActiveRouter() {
   });
 
   activeRoutesRouter = newRouter;
-  console.log('[ProxyToServerTS] ✅ Router rebuilt successfully.');
+  console.log(`[ProxyToServerTS] ✅ Router rebuilt successfully for port ${currentProxyPort} with ${allRoutes.length} routes.`);
 }
 
 function loadRoutesFromFile() {
@@ -107,25 +111,38 @@ function loadRoutesFromFile() {
     console.log(`[ProxyToServerTS] Attempting to load routes from ${routesJsonPath}`);
     if (!fs.existsSync(routesJsonPath)) {
       console.warn(`[ProxyToServerTS] 🟡 routes.json not found. Waiting for the file to be created...`);
-      allRoutes = [];
-      portOnlineStatus = {};
-      rebuildActiveRouter();
+      if (currentProxyPort !== null) {
+          allRoutes = [];
+          currentProxyPort = null;
+          portOnlineStatus = {};
+          rebuildActiveRouter();
+      }
       return;
     }
 
     const content = fs.readFileSync(routesJsonPath, 'utf8');
     const parsed = JSON.parse(content) as RoutesFile;
 
+    if (typeof parsed.port !== 'number') {
+        console.error(`[ProxyToServerTS] ❌ 'port' is missing or not a number in routes.json.`);
+        currentProxyPort = null;
+        allRoutes = [];
+        rebuildActiveRouter();
+        return;
+    }
+
+    if (currentProxyPort !== parsed.port) {
+        console.log(`[ProxyToServerTS] Port configuration changed from ${currentProxyPort || 'none'} to ${parsed.port}.`);
+        currentProxyPort = parsed.port;
+        portOnlineStatus = {};
+    }
+
     if (!Array.isArray(parsed.routes)) {
         console.warn(`[ProxyToServerTS] Invalid format: 'routes' key is not an array.`);
         return;
     }
 
-    allRoutes = parsed.routes.map(route => ({
-        method: (route.method || '').toLowerCase(),
-        path: route.path,
-        port: route.port || 3000,
-    })).filter(route => {
+    allRoutes = parsed.routes.filter(route => {
         if (!route.path || typeof route.path !== 'string' || !route.method) {
             console.warn(`[ProxyToServerTS] Invalid route found (missing path or method). Skipping.`, route);
             return false;
@@ -133,47 +150,32 @@ function loadRoutesFromFile() {
         return true;
     });
 
-    console.log(`[ProxyToServerTS] ✔️ Loaded ${allRoutes.length} routes from file.`);
-    checkAllPorts();
+    console.log(`[ProxyToServerTS] ✔️ Loaded ${allRoutes.length} routes for port ${currentProxyPort}.`);
+    checkPortStatus();
 
   } catch (err) {
     console.error(`[ProxyToServerTS] ❌ Error loading or parsing routes.json: ${(err as Error).message}`);
+    currentProxyPort = null;
     allRoutes = [];
     rebuildActiveRouter();
   }
 }
 
-async function checkAllPorts() {
-  if (isCheckingPorts) return;
-  isCheckingPorts = true;
+async function checkPortStatus() {
+  if (isCheckingPort || currentProxyPort === null) return;
+  isCheckingPort = true;
 
-  const uniquePorts = [...new Set(allRoutes.map(route => route.port))];
-  let hasStateChanged = false;
+  const portToCheck = currentProxyPort;
+  const wasOnline = portOnlineStatus[portToCheck];
+  const isOnline = await isPortOnline(portToCheck);
   
-  const newPortStatus: Record<number, boolean> = {};
-
-  await Promise.all(uniquePorts.map(async (port) => {
-    const isOnline = await isPortOnline(port);
-    newPortStatus[port] = isOnline;
-
-    if (portOnlineStatus[port] !== isOnline) {
-      console.log(`[ProxyToServerTS] Port ${port} is now ${isOnline ? '🟢 ONLINE' : '🔴 OFFLINE'}`);
-      hasStateChanged = true;
-    }
-  }));
-
-  if (Object.keys(portOnlineStatus).length !== Object.keys(newPortStatus).length) {
-    hasStateChanged = true;
-  }
-
-  portOnlineStatus = newPortStatus;
-  
-  if (hasStateChanged) {
-    console.log('[ProxyToServerTS] Port status changed. Rebuilding router...');
+  if (wasOnline !== isOnline) {
+    console.log(`[ProxyToServerTS] Port ${portToCheck} is now ${isOnline ? '🟢 ONLINE' : '🔴 OFFLINE'}`);
+    portOnlineStatus[portToCheck] = isOnline;
     rebuildActiveRouter();
   }
 
-  isCheckingPorts = false;
+  isCheckingPort = false;
 }
 
 function setupWatcherAndInterval() {
@@ -184,7 +186,7 @@ function setupWatcherAndInterval() {
     }
   });
 
-  setInterval(checkAllPorts, 2000);
+  setInterval(checkPortStatus, 2000);
 }
 
 loadRoutesFromFile();
