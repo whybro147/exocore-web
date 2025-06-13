@@ -1,10 +1,12 @@
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
+import net from 'net';
 import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 
 const routesJsonPath = path.join(__dirname, 'routes.json');
+const checkInterval = 1000;
 
 let activeRoutesRouter = Router();
 
@@ -26,92 +28,111 @@ function sendErrorHtmlPage(res: Response, statusCode: number = 502) {
 interface RouteConfig {
   method: string;
   path: string;
-  port?: number;
+  port: number;
 }
 
 interface RoutesFile {
   routes: RouteConfig[];
 }
 
-function loadAndRegisterRoutes() {
+// 🧠 Check if a port is available by trying to connect
+function isPortOnline(port: number): Promise<boolean> {
+  return new Promise(resolve => {
+    const socket = net.connect({ port, host: '127.0.0.1' }, () => {
+      socket.end();
+      resolve(true);
+    });
+    socket.on('error', () => resolve(false));
+    socket.setTimeout(1000, () => {
+      socket.destroy();
+      resolve(false);
+    });
+  });
+}
+
+let currentRoutes: RouteConfig[] = [];
+
+function refreshActiveRouter() {
   const newRouter = Router();
 
-  try {
-    if (fs.existsSync(routesJsonPath)) {
-      const routesFileContent = fs.readFileSync(routesJsonPath, 'utf8');
-      const routesData = JSON.parse(routesFileContent) as RoutesFile;
+  currentRoutes.forEach(route => {
+    const method = route.method.toLowerCase();
+    const port = route.port;
+    const routePath = route.path;
 
-      if (routesData && Array.isArray(routesData.routes)) {
-        routesData.routes.forEach(route => {
-          const method = route.method?.trim().toLowerCase();
-          const routePath = route.path;
-          const port = route.port;
+    (newRouter as any)[method](routePath, (req: Request, res: Response) => {
+      const options: http.RequestOptions = {
+        hostname: '127.0.0.1',
+        port,
+        path: req.originalUrl,
+        method: req.method,
+        headers: { ...req.headers, 'host': `localhost:${port}` },
+      };
 
-          if (
-            typeof routePath !== 'string' ||
-            typeof port !== 'number' ||
-            port <= 0 || port >= 65536 ||
-            typeof (newRouter as any)[method] !== 'function'
-          ) {
-            return; // silently skip invalid
+      const headersAsRecord = options.headers as Record<string, unknown>;
+      delete headersAsRecord['connection'];
+
+      const proxy = http.request(options, backendResponse => {
+        if (backendResponse.statusCode && backendResponse.statusCode >= 400) {
+          sendErrorHtmlPage(res, backendResponse.statusCode);
+          backendResponse.resume();
+          return;
+        }
+
+        Object.entries(backendResponse.headers).forEach(([key, value]) => {
+          if (key.toLowerCase() !== 'transfer-encoding') {
+            res.setHeader(key, value as string);
           }
-
-          (newRouter as any)[method](routePath, (req: Request, res: Response) => {
-            const options: http.RequestOptions = {
-              hostname: 'localhost',
-              port,
-              path: req.originalUrl,
-              method: req.method,
-              headers: { ...req.headers, 'host': `localhost:${port}` },
-            };
-
-            const headersAsRecord = options.headers as Record<string, unknown>;
-            delete headersAsRecord['connection'];
-
-            const backendRequest = http.request(options, backendResponse => {
-              if (backendResponse.statusCode && backendResponse.statusCode >= 400) {
-                sendErrorHtmlPage(res, backendResponse.statusCode);
-                backendResponse.resume();
-                return;
-              }
-
-              Object.entries(backendResponse.headers).forEach(([key, value]) => {
-                if (key.toLowerCase() !== 'transfer-encoding') {
-                  res.setHeader(key, value as string);
-                }
-              });
-
-              res.status(backendResponse.statusCode || 200);
-              backendResponse.pipe(res);
-            });
-
-            backendRequest.on('error', (error: NodeJS.ErrnoException) => {
-              const known = ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT'];
-              sendErrorHtmlPage(res, known.includes(error.code || '') ? 503 : 502);
-            });
-
-            req.pipe(backendRequest);
-          });
         });
-      }
-    }
-  } catch {
-    // silently fail
-  }
+
+        res.status(backendResponse.statusCode || 200);
+        backendResponse.pipe(res);
+      });
+
+      proxy.on('error', () => sendErrorHtmlPage(res, 503));
+      req.pipe(proxy);
+    });
+  });
 
   activeRoutesRouter = newRouter;
 }
 
-loadAndRegisterRoutes();
+async function scanRoutes() {
+  try {
+    if (!fs.existsSync(routesJsonPath)) return;
 
-// Silent watch every 1s
-fs.watchFile(routesJsonPath, { interval: 1000 }, (curr, prev) => {
-  if (curr.mtime !== prev.mtime) {
-    loadAndRegisterRoutes();
+    const data = fs.readFileSync(routesJsonPath, 'utf8');
+    const { routes = [] }: RoutesFile = JSON.parse(data);
+
+    const validRoutes: RouteConfig[] = [];
+
+    for (const route of routes) {
+      if (
+        typeof route.method !== 'string' ||
+        typeof route.path !== 'string' ||
+        typeof route.port !== 'number'
+      ) continue;
+
+      const isOnline = await isPortOnline(route.port);
+      if (isOnline) validRoutes.push(route); // Add only if port is online
+    }
+
+    // If new route list differs, update
+    const newKey = JSON.stringify(validRoutes);
+    const oldKey = JSON.stringify(currentRoutes);
+    if (newKey !== oldKey) {
+      currentRoutes = validRoutes;
+      refreshActiveRouter();
+    }
+  } catch {
+    // Silent fail
   }
-});
+}
 
-// Middleware export
+// ⏱️ Every second, check for new ports online
+setInterval(scanRoutes, checkInterval);
+
+// ⛓ Middleware to proxy to currently active routes
 const mainProxyRouter = Router();
 mainProxyRouter.use((req: Request, res: Response, next: NextFunction) => {
   activeRoutesRouter(req, res, next);
