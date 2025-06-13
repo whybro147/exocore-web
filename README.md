@@ -3,7 +3,7 @@
 This is the main codebase for the **Exocore** project.
 
 > Visit our docs for full documentation and setup guide:  
-👉 [Documentation Link Here](https://example.com/docs) 
+👉 [Documentation Link Here](https://docs-exocore.onrender.com/) 
 ---
 
 ## 🛡 License
