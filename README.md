@@ -21,3 +21,4 @@ This project is maintained and developed by the **Exocore** team:
 - Jonell Magallanes  
 - Jr Busaco  
 - Kiff Hyacinth Pon
+- Cyril Encenso
