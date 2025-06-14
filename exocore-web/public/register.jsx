@@ -89,7 +89,7 @@ function App() {
         }
         targetSignal(file.name);
         const reader = new FileReader();
-        reader.onload = () => setForm((prev) => ({ ...prev, [field]: reader.result }));
+        reader.onload = () => updateField(field, reader.result);
         reader.readAsDataURL(file);
     }
     
@@ -104,13 +104,21 @@ function App() {
         setValidationErrors({});
 
         const currentForm = form();
-        const requiredFields = ['user', 'email', 'pass', 'nickname', 'dob', 'country', 'timezone'];
+        // All fields are now required
+        const requiredFields = ['user', 'email', 'pass', 'nickname', 'dob', 'country', 'timezone', 'bio', 'avatar', 'cover_photo'];
         const errors = {};
 
         // Check for empty required fields
         requiredFields.forEach(field => {
             if (!currentForm[field]) {
-                const fieldName = { user: 'Username', pass: 'Password', dob: 'Date of Birth' }[field] || field.charAt(0).toUpperCase() + field.slice(1);
+                const fieldName = { 
+                    user: 'Username', 
+                    pass: 'Password', 
+                    dob: 'Date of Birth',
+                    bio: 'Short Bio',
+                    avatar: 'Avatar',
+                    cover_photo: 'Cover Photo'
+                }[field] || field.charAt(0).toUpperCase() + field.slice(1);
                 errors[field] = `${fieldName} is required.`;
             }
         });
@@ -181,10 +189,15 @@ function App() {
     }
 
     /**
-     * Determines if the submit button should be disabled.
+     * Determines if the submit button should be disabled based on form completion and validity.
      * @returns {boolean} True if the button should be disabled.
      */
-    const isSubmitDisabled = () => loading() || !!passwordWarning();
+    const isSubmitDisabled = () => {
+        const f = form();
+        const requiredFields = ['user', 'email', 'pass', 'nickname', 'dob', 'country', 'timezone', 'bio', 'avatar', 'cover_photo'];
+        const hasEmptyFields = requiredFields.some(field => !f[field]);
+        return loading() || !!passwordWarning() || hasEmptyFields;
+    };
 
     return (
         <div class="register-page-wrapper">
@@ -210,8 +223,8 @@ function App() {
                 .input-wrapper { position: relative; }
                 .form-input, .form-textarea { width: 100%; padding: 0.9rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-inner); font-family: var(--font-body); font-size: 1rem; background-color: var(--bg-primary); color: var(--text-primary); box-sizing: border-box; transition: border-color 0.2s, box-shadow 0.2s; }
                 .form-input:focus, .form-textarea:focus { outline:0; border-color: var(--accent-primary); box-shadow: 0 0 0 3px rgba(0, 170, 255, 0.2); }
-                .form-input.input-error { border-color: var(--error-color); }
-                .form-input.input-error:focus { box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.2); }
+                .input-error { border-color: var(--error-color) !important; }
+                .input-error:focus { box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.2) !important; }
                 .form-textarea { min-height: 80px; resize: vertical; }
                 .password-toggle { position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; }
                 .field-error-message, .password-warning { font-size: 0.875rem; color: var(--error-color); margin-top: 0.5rem; }
@@ -281,22 +294,25 @@ function App() {
                         </div>
                         {/* Bio */}
                         <div class="form-group full-width">
-                            <label class="form-label">Short Bio (optional)</label>
-                            <textarea class="form-textarea" value={form().bio} onInput={(e) => updateField('bio', e.currentTarget.value)} />
+                            <label class="form-label" for="bio">Short Bio</label>
+                            <textarea id="bio" class="form-textarea" classList={{ 'input-error': !!validationErrors().bio }} value={form().bio} onInput={(e) => updateField('bio', e.currentTarget.value)} />
+                            <Show when={validationErrors().bio}><div class="field-error-message">{validationErrors().bio}</div></Show>
                         </div>
                         {/* File Uploads */}
                         <div class="form-group full-width">
-                             <label class="form-label">Profile Images (Optional)</label>
+                             <label class="form-label">Profile Images</label>
                              <div class="form-grid">
-                                 <button type="button" class="file-upload-btn" onClick={() => avatarInputRef?.click()}>
+                                 <button type="button" class="file-upload-btn" classList={{ 'input-error': !!validationErrors().avatar }} onClick={() => avatarInputRef?.click()}>
                                      <IconUpload />
                                      <span class="file-name" title={avatarFileName()}>{avatarFileName() || 'Choose Avatar'}</span>
                                  </button>
-                                 <button type="button" class="file-upload-btn" onClick={() => coverPhotoInputRef?.click()}>
+                                 <button type="button" class="file-upload-btn" classList={{ 'input-error': !!validationErrors().cover_photo }} onClick={() => coverPhotoInputRef?.click()}>
                                      <IconUpload />
                                      <span class="file-name" title={coverPhotoFileName()}>{coverPhotoFileName() || 'Choose Cover Photo'}</span>
                                  </button>
                              </div>
+                            <Show when={validationErrors().avatar}><div class="field-error-message">{validationErrors().avatar}</div></Show>
+                            <Show when={validationErrors().cover_photo && !validationErrors().avatar}><div class="field-error-message">{validationErrors().cover_photo}</div></Show>
                             <input type="file" accept="image/*" ref={el => avatarInputRef = el} onInput={(e) => handleFileChange('avatar', e)} style={{ display: 'none' }} />
                             <input type="file" accept="image/*" ref={el => coverPhotoInputRef = el} onInput={(e) => handleFileChange('cover_photo', e)} style={{ display: 'none' }} />
                         </div>
